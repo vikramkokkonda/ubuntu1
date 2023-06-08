@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: ubuntutest1
+    io.kompose.service: ubuntu
+  name: ubuntutest1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubuntu
+      io.kompose.service: ubuntu
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: ubuntu
+        io.kompose.service: ubuntu
+    spec:
+      containers:
+      - image: #{containerregistry}#/uniper/#{env.name}#/eai-phobos/ubuntu-#{eamId}#:#{Build.BuildNumber}#
+        name: ubuntu
+        command: ["/bin/sleep", "3650d"]
+        resources:
+          limits:
+            cpu: "0.75"
+            memory: 500Mi
+          requests:
+            cpu: "0.5"
+            memory: 250Mi
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+          readOnly: false
+        securityContext:
+          readOnlyRootFilesystem: true
+      volumes:
+        - name: tmp-volume
+          emptyDir:
+            medium: Memory
+      restartPolicy: Always
+      imagePullSecrets:
+      - name: #{acr.auth.secret.name}#

@@ -1,0 +1,89 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger: none
+# - development
+
+resources:
+- repo: self
+
+workspace:
+  clean: "all"
+
+pool:
+  name: INTSOL
+  demands: maven
+
+variables:
+- group: pipeline-variables
+- name: tag
+  value: '$(Build.BuildId)'
+- name: eamId
+  value: '163805'
+- name: containerregistry
+  value: 'unipercontainerregistry.azurecr.io'
+- name: acr.auth.secret.name
+  value: 'acr-auth'
+- name: packageVersion
+  value: '3.0.1-SNAPSHOT'
+- name: personal_access_token
+  value: $(ACCESS_TOKEN)
+- name: env.name
+  value: 'dev'
+
+steps:
+- task: DownloadSecureFile@1
+  name: 'mavenSettings'
+  displayName: 'Download secure file'
+  inputs:
+    secureFile: 'log-ci-settings-FKID_updated_pat.xml'
+    retryCount: 5
+
+- task: Docker@1
+  displayName: 'Build an image'
+  inputs:
+    containerregistrytype: 'Container Registry'
+    dockerRegistryEndpoint: 'Connection to unipercontainerregistry'
+    dockerFile: './Dockerfile'
+    arguments: '--no-cache'
+    imageName: 'uniper/$(env.name)/eai-phobos/ubuntu-$(eamId):$(Build.BuildNumber)'
+
+- task: Bash@3
+  displayName: 'Install trivy'
+  inputs:
+    targetType: 'inline'
+    script: |
+      export VERSION=0.34.0
+      curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v${VERSION}
+
+- task: Bash@3
+  displayName: 'Scan image ubuntu with trivy'
+  inputs:
+    targetType: 'inline'
+    script: |
+      docker images
+      trivy image \
+        --exit-code 0 \
+        --severity HIGH,CRITICAL \
+        --quiet \
+        --no-progress $(containerregistry)/uniper/$(env.name)/eai-phobos/ubuntu-$(eamId):$(Build.BuildNumber) 
+    failOnStderr: false
+
+- task: Docker@1
+  displayName: 'Push an image'
+  inputs:
+    containerregistrytype: 'Container Registry'
+    dockerRegistryEndpoint: 'Connection to unipercontainerregistry'
+    command: 'Push an image'
+    imageName: 'uniper/$(env.name)/eai-phobos/ubuntu-$(eamId):$(Build.BuildNumber)'
+  
+- task: CopyFiles@1
+  displayName: 'Copy deployment yaml to: $(build.artifactstagingdirectory)'
+  inputs:
+    SourceFolder: './'
+    Contents: '**/*.yaml'
+    TargetFolder: '$(build.artifactstagingdirectory)'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
